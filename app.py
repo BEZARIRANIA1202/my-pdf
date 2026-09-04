@@ -124,26 +124,27 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # رابط استخدام نموذج Gemini 3.6 Flash
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={clean_api_key}"
+                    # قائمة النماذج حسب الأولوية لتفادي خطأ الضغط 503
+                    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+                    response_text = None
+
                     headers = {"Content-Type": "application/json; charset=utf-8"}
-                    payload = {
-                        "contents": [
-                            {
-                                "parts": [{"text": prompt_text}]
-                            }
-                        ]
-                    }
+                    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
 
-                    res = requests.post(url, json=payload, headers=headers, timeout=60)
-                    res_data = res.json()
+                    for model_name in models_to_try:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={clean_api_key}"
+                        res = requests.post(url, json=payload, headers=headers, timeout=60)
+                        res_data = res.json()
 
-                    if "candidates" in res_data and len(res_data["candidates"]) > 0:
-                        response_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                        if "candidates" in res_data and len(res_data["candidates"]) > 0:
+                            response_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                            break
+
+                    if response_text:
                         st.session_state["messages"].append({"role": "assistant", "content": response_text})
                         st.rerun()
                     else:
-                        st.error(f"خطأ من الـ API: {res_data}")
+                        st.error("الخوادم عليها ضغط حالياً، يرجى إعادة المحاولة بعد بضع ثوانٍ.")
 
                 except Exception as e:
                     error_details = traceback.format_exc()
