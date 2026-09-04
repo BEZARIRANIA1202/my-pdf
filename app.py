@@ -124,11 +124,11 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # النماذج المعتمدة رسمياً عبر API
+                    # تجربة المعرفات المعتمَدة لمنع خطأ 404
                     models_to_try = [
+                        "gemini-2.5-flash",
                         "gemini-2.0-flash",
-                        "gemini-1.5-flash-latest",
-                        "gemini-1.5-flash"
+                        "gemini-1.5-flash-8b"
                     ]
                     
                     response_text = None
