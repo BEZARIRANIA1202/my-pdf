@@ -124,7 +124,8 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={clean_api_key}"
+                    # رابط استخدام نموذج Gemini 3.6 Flash
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={clean_api_key}"
                     headers = {"Content-Type": "application/json; charset=utf-8"}
                     payload = {
                         "contents": [
