@@ -124,9 +124,10 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # قائمة النماذج حسب الأولوية لتفادي خطأ الضغط 503
-                    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+                    # النماذج الرسمية والمستقرة المتاحة للـ REST API
+                    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
                     response_text = None
+                    last_error = None
 
                     headers = {"Content-Type": "application/json; charset=utf-8"}
                     payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
@@ -139,12 +140,14 @@ if clean_api_key:
                         if "candidates" in res_data and len(res_data["candidates"]) > 0:
                             response_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
                             break
+                        else:
+                            last_error = res_data
 
                     if response_text:
                         st.session_state["messages"].append({"role": "assistant", "content": response_text})
                         st.rerun()
                     else:
-                        st.error("الخوادم عليها ضغط حالياً، يرجى إعادة المحاولة بعد بضع ثوانٍ.")
+                        st.error(f"خطأ من الـ API: {last_error}")
 
                 except Exception as e:
                     error_details = traceback.format_exc()
