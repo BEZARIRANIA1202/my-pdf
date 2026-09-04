@@ -1,11 +1,12 @@
 import os
+import re
+import requests
 import traceback
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from google import genai
 
 st.set_page_config(page_title="مساعد المستندات السريع", page_icon="⚡", layout="wide")
 st.title("⚡ مساعد المستندات الفوري")
@@ -25,11 +26,13 @@ embeddings = load_embeddings()
 # --- القائمة الجانبية ---
 st.sidebar.title("⚙️ الخيارات")
 
-if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
-    clean_api_key = st.secrets["GOOGLE_API_KEY"]
-else:
-    api_key_input = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
-    clean_api_key = api_key_input.strip() if api_key_input else ""
+# جلب وتنظيف مفتاح الـ API لضمان خلوه من أي رموز عربية أو مسافات
+raw_api_key = st.secrets.get("GOOGLE_API_KEY", "")
+if not raw_api_key:
+    raw_api_key = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
+
+# تنظيف المفتاح وإبقاء أحرف الـ ASCII المقبولة فقط
+clean_api_key = re.sub(r'[^\x00-\x7F]+', '', raw_api_key).strip() if raw_api_key else ""
 
 if st.session_state["messages"]:
     st.sidebar.write("---")
@@ -53,8 +56,6 @@ if st.session_state["messages"]:
 
 # --- التطبيق الرئيسي ---
 if clean_api_key:
-    os.environ["GOOGLE_API_KEY"] = clean_api_key
-
     uploaded_files = st.file_uploader("قم برفع ملفات PDF:", type="pdf", accept_multiple_files=True)
 
     if uploaded_files:
@@ -116,7 +117,7 @@ if clean_api_key:
                     relevant_docs = retriever.invoke(user_query)
                     context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
 
-                    prompt = (
+                    prompt_text = (
                         "You are an intelligent multi-lingual assistant capable of understanding all languages, "
                         "including dialects such as Algerian Darja, French, Arabic, and English.\n"
                         "Analyze the provided document context below and answer the user's question or request accurately.\n"
@@ -126,15 +127,26 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # استدعى مباشر ومستقر عبر المكتبة الرسمية لتفادي أخطاء ASCII
-                    client = genai.Client(api_key=clean_api_key)
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=prompt,
-                    )
+                    # استدعاء مباشر عبر REST API يتفادى أخطاء الترميز والمكتبات الخارجية
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={clean_api_key}"
+                    headers = {"Content-Type": "application/json; charset=utf-8"}
+                    payload = {
+                        "contents": [
+                            {
+                                "parts": [{"text": prompt_text}]
+                            }
+                        ]
+                    }
 
-                    st.session_state["messages"].append({"role": "assistant", "content": response.text})
-                    st.rerun()
+                    res = requests.post(url, json=payload, headers=headers, timeout=60)
+                    res_data = res.json()
+
+                    if "candidates" in res_data and len(res_data["candidates"]) > 0:
+                        response_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                        st.session_state["messages"].append({"role": "assistant", "content": response_text})
+                        st.rerun()
+                    else:
+                        st.error(f"خطأ من الـ API: {res_data}")
 
                 except Exception as e:
                     error_details = traceback.format_exc()
@@ -142,4 +154,4 @@ if clean_api_key:
                     st.code(error_details, language="python")
 
 else:
-    st.warning("يرجى إدخال Google API Key في القائمة الجانبية للبدء.")
+    st.warning("يرجى إدخال Google API Key صالح في القائمة الجانبية للبدء.")
