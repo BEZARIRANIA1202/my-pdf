@@ -1,4 +1,5 @@
 import os
+import traceback
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -73,9 +74,8 @@ if clean_api_key:
                     loader = PyPDFLoader(temp_path)
                     docs = loader.load()
                     
-                    # تنظيف النصوص وتجاهل الصفحات الفارغة
                     for d in docs:
-                        cleaned = d.page_content.encode('utf-8', 'ignore').decode('utf-8').strip()
+                        cleaned = str(d.page_content).strip()
                         if cleaned:
                             d.page_content = cleaned
                             all_docs.append(d)
@@ -83,11 +83,9 @@ if clean_api_key:
                     if os.path.exists(temp_path):
                         os.remove(temp_path)
 
-                # تجزئة المستند إلى قطع متوازنة
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
                 chunks = text_splitter.split_documents(all_docs)
 
-                # إنشاء القاعدة المتجهة في الذاكرة محلياً
                 vectorstore = FAISS.from_documents(chunks, embeddings)
                 
                 st.session_state["retriever"] = vectorstore.as_retriever(search_kwargs={"k": 5})
@@ -108,13 +106,13 @@ if clean_api_key:
                 st.write("---")
 
         with st.form(key="query_form", clear_on_submit=True):
-            user_query = st.text_input("اطرح سؤالك أو اطلب التلخيص للمستندات هنا:")
+            user_query = st.text_input("اطرح سؤالك بأي لغة (عربية، دارجة، فرنسية، إنجليزية...):")
             submit_button = st.form_submit_button(label="إرسال السؤال 🚀")
 
         if submit_button and user_query:
             st.session_state["messages"].append({"role": "user", "content": user_query})
 
-            with st.spinner("⚡ جاري توليد الإجابة..."):
+            with st.spinner("⚡ جاري البحث والإجابة..."):
                 try:
                     retriever = st.session_state["retriever"]
                     relevant_docs = retriever.invoke(user_query)
@@ -126,12 +124,13 @@ if clean_api_key:
                         temperature=0.3
                     )
 
+                    # تعليمات قوية للنموذج ليفهم الدارجة ويرد بنفس لغة المستخدم
                     prompt_template = ChatPromptTemplate.from_template(
-                        "أنت مساعد ذكي ومباشر. استخدم أجزاء المستندات المرفقة أدناه "
-                        "للإجابة على سؤال المستخدم أو تنفيذ طلبه بدقة وبنفس لغة السؤال.\n"
-                        "إذا كان الطلب تلخيصاً، قم بتلخيص المحاور الرئيسية الموجودة في النصوص المرفقة بشكل منظم وفي نقاط.\n\n"
-                        "المستندات:\n{context}\n\n"
-                        "السؤال/الطلب: {question}"
+                        "You are an intelligent multi-lingual assistant capable of understanding all languages, including dialects such as Algerian Darja, French, Arabic, and English.\n"
+                        "Analyze the provided document context below and answer the user's question or request accurately.\n"
+                        "CRITICAL RULE: Respond in the EXACT SAME language or dialect used by the user in their request (e.g., if the user asks in Darja, reply in clear Darja; if in French, reply in French; if in Arabic, reply in Arabic).\n\n"
+                        "Document Context:\n{context}\n\n"
+                        "User Request/Question: {question}"
                     )
 
                     chain = prompt_template | llm | StrOutputParser()
@@ -141,7 +140,9 @@ if clean_api_key:
                     st.rerun()
 
                 except Exception as e:
-                    st.error(f"حدث خطأ أثناء معالجة الطلب: {e}")
+                    error_details = traceback.format_exc()
+                    st.error(f"حدث خطأ: {e}")
+                    st.code(error_details, language="python")
 
 else:
     st.warning("يرجى إدخال Google API Key في القائمة الجانبية للبدء.")
