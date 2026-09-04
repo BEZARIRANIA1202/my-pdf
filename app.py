@@ -1,4 +1,5 @@
 import os
+import json
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -21,15 +22,39 @@ def load_embeddings():
 
 embeddings = load_embeddings()
 
-api_key_input = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
-clean_api_key = api_key_input.strip() if api_key_input else ""
+# --- إدارة القائمة الجانبية ---
+st.sidebar.title("⚙️ الخيارات")
 
-k_val = st.sidebar.slider("عدد الأجزاء المسترجعة (k):", min_value=3, max_value=20, value=10)
+# التعامل مع API Key
+if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
+    clean_api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    api_key_input = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
+    clean_api_key = api_key_input.strip() if api_key_input else ""
 
-if st.sidebar.button("مسح سجل المحادثة 🗑️"):
-    st.session_state["messages"] = []
-    st.rerun()
+# إمكانية حفظ وتحميل كل الأسئلة والإجابات المكتوبة
+if st.session_state["messages"]:
+    st.sidebar.write("---")
+    st.sidebar.subheader("💾 حفظ سجل المحادثة")
+    
+    # تجهيز سجل المحادثة كنص منظم للتحميل
+    chat_text = "=== سجل المحادثة والأسئلة ===\n\n"
+    for i, msg in enumerate(st.session_state["messages"], 1):
+        role_label = "❓ السؤال" if msg["role"] == "user" else "💡 الإجابة"
+        chat_text += f"[{i}] {role_label}:\n{msg['content']}\n\n" + "-"*40 + "\n\n"
 
+    st.sidebar.download_button(
+        label="📥 تحميل سجل الأسئلة كامل (.txt)",
+        data=chat_text,
+        file_name="chat_history.txt",
+        mime="text/plain"
+    )
+
+    if st.sidebar.button("مسح المحادثة 🗑️"):
+        st.session_state["messages"] = []
+        st.rerun()
+
+# --- التطبيق الرئيسي ---
 if clean_api_key:
     os.environ["GOOGLE_API_KEY"] = clean_api_key
 
@@ -57,10 +82,9 @@ if clean_api_key:
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=120)
                 chunks = text_splitter.split_documents(all_docs)
 
-                # استخدام FAISS بدلاً من Chroma لتفادي ImportError
                 vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)
                 
-                st.session_state["retriever"] = vectorstore.as_retriever(search_kwargs={"k": k_val})
+                st.session_state["retriever"] = vectorstore.as_retriever(search_kwargs={"k": 10})
                 st.session_state["files_names"] = current_files_names
                 st.session_state["messages"] = []
                 
@@ -75,14 +99,6 @@ if clean_api_key:
             else:
                 st.markdown("### 💡 الإجابة:")
                 st.write(msg["content"])
-                
-                st.download_button(
-                    label="💾 تحميل هذه الإجابة (.txt)",
-                    data=msg["content"],
-                    file_name=f"summary_response_{idx}.txt",
-                    mime="text/plain",
-                    key=f"dl_{idx}"
-                )
                 st.write("---")
 
         with st.form(key="query_form", clear_on_submit=True):
