@@ -5,9 +5,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from google import genai
 
 st.set_page_config(page_title="مساعد المستندات السريع", page_icon="⚡", layout="wide")
 st.title("⚡ مساعد المستندات الفوري")
@@ -118,25 +116,24 @@ if clean_api_key:
                     relevant_docs = retriever.invoke(user_query)
                     context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
 
-                    llm = ChatGoogleGenerativeAI(
-                        model="gemini-1.5-flash",
-                        google_api_key=clean_api_key,
-                        temperature=0.3
-                    )
-
-                    # تعليمات قوية للنموذج ليفهم الدارجة ويرد بنفس لغة المستخدم
-                    prompt_template = ChatPromptTemplate.from_template(
-                        "You are an intelligent multi-lingual assistant capable of understanding all languages, including dialects such as Algerian Darja, French, Arabic, and English.\n"
+                    prompt = (
+                        "You are an intelligent multi-lingual assistant capable of understanding all languages, "
+                        "including dialects such as Algerian Darja, French, Arabic, and English.\n"
                         "Analyze the provided document context below and answer the user's question or request accurately.\n"
-                        "CRITICAL RULE: Respond in the EXACT SAME language or dialect used by the user in their request (e.g., if the user asks in Darja, reply in clear Darja; if in French, reply in French; if in Arabic, reply in Arabic).\n\n"
-                        "Document Context:\n{context}\n\n"
-                        "User Request/Question: {question}"
+                        "CRITICAL RULE: Respond in the EXACT SAME language or dialect used by the user in their request "
+                        "(e.g., if the user asks in Darja, reply in clear Darja; if in French, reply in French; if in Arabic, reply in Arabic).\n\n"
+                        f"Document Context:\n{context_text}\n\n"
+                        f"User Request/Question: {user_query}"
                     )
 
-                    chain = prompt_template | llm | StrOutputParser()
-                    response_text = chain.invoke({"context": context_text, "question": user_query})
+                    # استدعى مباشر ومستقر عبر المكتبة الرسمية لتفادي أخطاء ASCII
+                    client = genai.Client(api_key=clean_api_key)
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt,
+                    )
 
-                    st.session_state["messages"].append({"role": "assistant", "content": response_text})
+                    st.session_state["messages"].append({"role": "assistant", "content": response.text})
                     st.rerun()
 
                 except Exception as e:
