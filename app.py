@@ -3,23 +3,15 @@ import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from google import genai
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 st.set_page_config(page_title="مساعد المستندات السريع", page_icon="⚡", layout="wide")
 st.title("⚡ مساعد المستندات الفوري")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
-
-@st.cache_resource
-def load_embeddings():
-    return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'}
-    )
-
-embeddings = load_embeddings()
 
 # --- القائمة الجانبية ---
 st.sidebar.title("⚙️ الخيارات")
@@ -60,7 +52,7 @@ if clean_api_key:
         current_files_names = [f.name for f in uploaded_files]
         
         if "retriever" not in st.session_state or st.session_state.get("files_names") != current_files_names:
-            with st.spinner("⚡ جاري تحليل وقراءة جميع الملفات المرفوعة..."):
+            with st.spinner("⚡ جاري معالجة الملفات بثرعة عالية..."):
                 all_docs = []
                 
                 for idx, uploaded_file in enumerate(uploaded_files):
@@ -71,7 +63,6 @@ if clean_api_key:
                     loader = PyPDFLoader(temp_path)
                     docs = loader.load()
                     
-                    # ضمان تحويل النصوص إلى ترميز UTF-8 لتفادي خطأ ASCII
                     for d in docs:
                         d.page_content = d.page_content.encode('utf-8', 'ignore').decode('utf-8')
                         
@@ -83,9 +74,11 @@ if clean_api_key:
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=120)
                 chunks = text_splitter.split_documents(all_docs)
 
+                # استخدام Embeddings فائقة السرعة من جوجل مباشرة
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=clean_api_key)
                 vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)
                 
-                st.session_state["retriever"] = vectorstore.as_retriever(search_kwargs={"k": 10})
+                st.session_state["retriever"] = vectorstore.as_retriever(search_kwargs={"k": 5})
                 st.session_state["files_names"] = current_files_names
                 st.session_state["messages"] = []
                 
@@ -109,36 +102,30 @@ if clean_api_key:
         if submit_button and user_query:
             st.session_state["messages"].append({"role": "user", "content": user_query})
 
-            with st.spinner("⚡ جاري البحث في جميع الملفات وتوليد الإجابة..."):
+            with st.spinner("⚡ جاري توليد الإجابة..."):
                 try:
                     retriever = st.session_state["retriever"]
                     relevant_docs = retriever.invoke(user_query)
-                    
-                    context_list = []
-                    for doc in relevant_docs:
-                        clean_text = doc.page_content.encode('utf-8', 'ignore').decode('utf-8')
-                        context_list.append(clean_text)
-                        
-                    context_text = "\n\n".join(context_list)
+                    context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
 
-                    prompt = (
+                    llm = ChatGoogleGenerativeAI(
+                        model="gemini-1.5-flash",
+                        google_api_key=clean_api_key,
+                        temperature=0.3
+                    )
+
+                    prompt_template = ChatPromptTemplate.from_template(
                         "أنت مساعد ذكي ومباشر. استخدم أجزاء المستندات المرفقة أدناه "
                         "للإجابة على سؤال المستخدم أو تنفيذ طلبه بدقة وبنفس لغة السؤال.\n"
                         "إذا كان الطلب تلخيصاً، قم بتلخيص المحاور الرئيسية الموجودة في النصوص المرفقة بشكل منظم وفي نقاط.\n\n"
-                        f"المستندات:\n{context_text}\n\n"
-                        f"السؤال/الطلب: {user_query}"
+                        "المستندات:\n{context}\n\n"
+                        "السؤال/الطلب: {question}"
                     )
 
-                    # إجبار تحويل الـ Prompt لترميز UTF-8 صريح
-                    safe_prompt = prompt.encode('utf-8', 'ignore').decode('utf-8')
+                    chain = prompt_template | llm | StrOutputParser()
+                    response_text = chain.invoke({"context": context_text, "question": user_query})
 
-                    client = genai.Client(api_key=clean_api_key)
-                    response = client.models.generate_content(
-                        model="gemini-3.6-flash",
-                        contents=safe_prompt,
-                    )
-                    
-                    st.session_state["messages"].append({"role": "assistant", "content": response.text})
+                    st.session_state["messages"].append({"role": "assistant", "content": response_text})
                     st.rerun()
 
                 except Exception as e:
