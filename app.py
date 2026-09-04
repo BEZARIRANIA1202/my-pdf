@@ -1,5 +1,4 @@
 import os
-import json
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -25,19 +24,16 @@ embeddings = load_embeddings()
 # --- إدارة القائمة الجانبية ---
 st.sidebar.title("⚙️ الخيارات")
 
-# التعامل مع API Key
 if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
     clean_api_key = st.secrets["GOOGLE_API_KEY"]
 else:
     api_key_input = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
     clean_api_key = api_key_input.strip() if api_key_input else ""
 
-# إمكانية حفظ وتحميل كل الأسئلة والإجابات المكتوبة
 if st.session_state["messages"]:
     st.sidebar.write("---")
     st.sidebar.subheader("💾 حفظ سجل المحادثة")
     
-    # تجهيز سجل المحادثة كنص منظم للتحميل
     chat_text = "=== سجل المحادثة والأسئلة ===\n\n"
     for i, msg in enumerate(st.session_state["messages"], 1):
         role_label = "❓ السؤال" if msg["role"] == "user" else "💡 الإجابة"
@@ -45,9 +41,9 @@ if st.session_state["messages"]:
 
     st.sidebar.download_button(
         label="📥 تحميل سجل الأسئلة كامل (.txt)",
-        data=chat_text,
+        data=chat_text.encode('utf-8'),
         file_name="chat_history.txt",
-        mime="text/plain"
+        mime="text/plain; charset=utf-8"
     )
 
     if st.sidebar.button("مسح المحادثة 🗑️"):
@@ -67,8 +63,9 @@ if clean_api_key:
             with st.spinner("⚡ جاري تحليل وقراءة جميع الملفات المرفوعة..."):
                 all_docs = []
                 
-                for uploaded_file in uploaded_files:
-                    temp_path = f"temp_{uploaded_file.name}"
+                for idx, uploaded_file in enumerate(uploaded_files):
+                    # استخدام اسم مؤقت آمن يتفادي مشاكل ترميز الأسماء العربية/الفرنكو-عربية
+                    temp_path = f"temp_doc_{idx}.pdf"
                     with open(temp_path, "wb") as f:
                         f.write(uploaded_file.getvalue())
 
