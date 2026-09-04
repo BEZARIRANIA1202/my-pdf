@@ -21,7 +21,7 @@ def load_embeddings():
 
 embeddings = load_embeddings()
 
-# --- إدارة القائمة الجانبية ---
+# --- القائمة الجانبية ---
 st.sidebar.title("⚙️ الخيارات")
 
 if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
@@ -64,13 +64,17 @@ if clean_api_key:
                 all_docs = []
                 
                 for idx, uploaded_file in enumerate(uploaded_files):
-                    # استخدام اسم مؤقت آمن يتفادي مشاكل ترميز الأسماء العربية/الفرنكو-عربية
                     temp_path = f"temp_doc_{idx}.pdf"
                     with open(temp_path, "wb") as f:
                         f.write(uploaded_file.getvalue())
 
                     loader = PyPDFLoader(temp_path)
                     docs = loader.load()
+                    
+                    # ضمان تحويل النصوص إلى ترميز UTF-8 لتفادي خطأ ASCII
+                    for d in docs:
+                        d.page_content = d.page_content.encode('utf-8', 'ignore').decode('utf-8')
+                        
                     all_docs.extend(docs)
                     
                     if os.path.exists(temp_path):
@@ -109,7 +113,13 @@ if clean_api_key:
                 try:
                     retriever = st.session_state["retriever"]
                     relevant_docs = retriever.invoke(user_query)
-                    context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
+                    
+                    context_list = []
+                    for doc in relevant_docs:
+                        clean_text = doc.page_content.encode('utf-8', 'ignore').decode('utf-8')
+                        context_list.append(clean_text)
+                        
+                    context_text = "\n\n".join(context_list)
 
                     prompt = (
                         "أنت مساعد ذكي ومباشر. استخدم أجزاء المستندات المرفقة أدناه "
@@ -119,10 +129,13 @@ if clean_api_key:
                         f"السؤال/الطلب: {user_query}"
                     )
 
+                    # إجبار تحويل الـ Prompt لترميز UTF-8 صريح
+                    safe_prompt = prompt.encode('utf-8', 'ignore').decode('utf-8')
+
                     client = genai.Client(api_key=clean_api_key)
                     response = client.models.generate_content(
                         model="gemini-3.6-flash",
-                        contents=prompt,
+                        contents=safe_prompt,
                     )
                     
                     st.session_state["messages"].append({"role": "assistant", "content": response.text})
