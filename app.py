@@ -1,5 +1,4 @@
 import os
-import re
 import requests
 import traceback
 import streamlit as st
@@ -26,13 +25,11 @@ embeddings = load_embeddings()
 # --- القائمة الجانبية ---
 st.sidebar.title("⚙️ الخيارات")
 
-# جلب وتنظيف مفتاح الـ API لضمان خلوه من أي رموز عربية أو مسافات
 raw_api_key = st.secrets.get("GOOGLE_API_KEY", "")
 if not raw_api_key:
     raw_api_key = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
 
-# تنظيف المفتاح وإبقاء أحرف الـ ASCII المقبولة فقط
-clean_api_key = re.sub(r'[^\x00-\x7F]+', '', raw_api_key).strip() if raw_api_key else ""
+clean_api_key = raw_api_key.strip() if raw_api_key else ""
 
 if st.session_state["messages"]:
     st.sidebar.write("---")
@@ -127,7 +124,6 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # استدعاء مباشر عبر REST API يتفادى أخطاء الترميز والمكتبات الخارجية
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={clean_api_key}"
                     headers = {"Content-Type": "application/json; charset=utf-8"}
                     payload = {
