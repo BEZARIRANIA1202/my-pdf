@@ -124,8 +124,13 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # النماذج الرسمية والمستقرة المتاحة للـ REST API
-                    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+                    # النماذج المعتمدة رسمياً عبر API
+                    models_to_try = [
+                        "gemini-2.0-flash",
+                        "gemini-1.5-flash-latest",
+                        "gemini-1.5-flash"
+                    ]
+                    
                     response_text = None
                     last_error = None
 
