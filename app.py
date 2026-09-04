@@ -52,7 +52,7 @@ if clean_api_key:
         current_files_names = [f.name for f in uploaded_files]
         
         if "retriever" not in st.session_state or st.session_state.get("files_names") != current_files_names:
-            with st.spinner("⚡ جاري معالجة الملفات بثرعة عالية..."):
+            with st.spinner("⚡ جاري تحليل المستندات الكبيرة وتجزئتها..."):
                 all_docs = []
                 
                 for idx, uploaded_file in enumerate(uploaded_files):
@@ -71,18 +71,27 @@ if clean_api_key:
                     if os.path.exists(temp_path):
                         os.remove(temp_path)
 
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=120)
+                # تقسيم النص إلى أجزاء أصغر لعدم إرهاق الـ API
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=60)
                 chunks = text_splitter.split_documents(all_docs)
 
-                # استخدام Embeddings فائقة السرعة من جوجل مباشرة
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=clean_api_key)
-                vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)
+                embeddings = GoogleGenerativeAIEmbeddings(
+                    model="models/text-embedding-004", 
+                    google_api_key=clean_api_key
+                )
+                
+                # إنشاء الفهرس وتغذية المستندات على دفعات صغيرة (Batching) لتفادي الـ Quota Error
+                batch_size = 32
+                vectorstore = FAISS.from_documents(chunks[:batch_size], embeddings)
+                
+                for i in range(batch_size, len(chunks), batch_size):
+                    vectorstore.add_documents(chunks[i:i + batch_size])
                 
                 st.session_state["retriever"] = vectorstore.as_retriever(search_kwargs={"k": 5})
                 st.session_state["files_names"] = current_files_names
                 st.session_state["messages"] = []
                 
-            st.success(f"✅ تم تحليل {len(uploaded_files)} ملفات بنجاح!")
+            st.success(f"✅ تم تحليل وتقسيم {len(uploaded_files)} ملفات بنجاح!")
 
     if "retriever" in st.session_state:
         st.write("---")
