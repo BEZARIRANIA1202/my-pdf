@@ -128,7 +128,7 @@ if clean_api_key:
                     )
 
                     # استخدام المكتبة الرسمية مع النموذج القياسي المدعوم دائماً
-                    model = genai.GenerativeModel('gemini-3.6-flash-latest')
+                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
                     response = model.generate_content(prompt_text)
 
                     if response and response.text:
