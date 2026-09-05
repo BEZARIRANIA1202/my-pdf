@@ -1,7 +1,7 @@
 import os
-import requests
 import traceback
 import streamlit as st
+import google.generativeai as genai
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -30,6 +30,9 @@ if not raw_api_key:
     raw_api_key = st.sidebar.text_input("أدخل Google API Key هنا:", type="password")
 
 clean_api_key = raw_api_key.strip() if raw_api_key else ""
+
+if clean_api_key:
+    genai.configure(api_key=clean_api_key)
 
 if st.session_state["messages"]:
     st.sidebar.write("---")
@@ -124,35 +127,15 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # تجربة المعرفات المعتمَدة لمنع خطأ 404
-                    models_to_try = [
-                        "gemini-2.5-flash",
-                        "gemini-2.0-flash",
-                        "gemini-1.5-flash-8b"
-                    ]
-                    
-                    response_text = None
-                    last_error = None
+                    # استخدام المكتبة الرسمية مع النموذج القياسي المدعوم دائماً
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(prompt_text)
 
-                    headers = {"Content-Type": "application/json; charset=utf-8"}
-                    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-
-                    for model_name in models_to_try:
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={clean_api_key}"
-                        res = requests.post(url, json=payload, headers=headers, timeout=60)
-                        res_data = res.json()
-
-                        if "candidates" in res_data and len(res_data["candidates"]) > 0:
-                            response_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                            break
-                        else:
-                            last_error = res_data
-
-                    if response_text:
-                        st.session_state["messages"].append({"role": "assistant", "content": response_text})
+                    if response and response.text:
+                        st.session_state["messages"].append({"role": "assistant", "content": response.text})
                         st.rerun()
                     else:
-                        st.error(f"خطأ من الـ API: {last_error}")
+                        st.error("لم يتم استلام إجابة صحيحة من النموذج.")
 
                 except Exception as e:
                     error_details = traceback.format_exc()
