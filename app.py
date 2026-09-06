@@ -129,7 +129,7 @@ if clean_api_key:
 
                     # استدعاء نموذج gemini-2.5-flash بـ API الجديد
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-3.6-flash ',
                         contents=prompt_text,
                     )
 
