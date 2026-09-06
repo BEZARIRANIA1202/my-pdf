@@ -53,7 +53,7 @@ if st.session_state["messages"]:
 
 # --- التطبيق الرئيسي ---
 if clean_api_key:
-    # تهيئة عميل Gemini الجديد
+    # تهيئة عميل Gemini
     client = genai.Client(api_key=clean_api_key)
 
     uploaded_files = st.file_uploader("قم برفع ملفات PDF:", type="pdf", accept_multiple_files=True)
@@ -127,17 +127,26 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # استدعاء نموذج gemini-2.5-flash بـ API الجديد
-                    response = client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=prompt_text,
-                    )
+                    # القائمة الاحتياطية للنماذج لتفادي خطأ 503 عند وجود ضغط
+                    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+                    response = None
+
+                    for model_name in models_to_try:
+                        try:
+                            response = client.models.generate_content(
+                                model=model_name,
+                                contents=prompt_text,
+                            )
+                            if response and response.text:
+                                break
+                        except Exception:
+                            continue
 
                     if response and response.text:
                         st.session_state["messages"].append({"role": "assistant", "content": response.text})
                         st.rerun()
                     else:
-                        st.error("لم يتم استلام إجابة من النموذج.")
+                        st.error("جميع النماذج مشغولة حالياً، يرجى إعادة المحاولة بعد بضع ثوانٍ.")
 
                 except Exception as e:
                     error_details = traceback.format_exc()
