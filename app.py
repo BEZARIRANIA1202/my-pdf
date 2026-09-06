@@ -1,7 +1,7 @@
 import os
 import traceback
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -31,9 +31,6 @@ if not raw_api_key:
 
 clean_api_key = raw_api_key.strip() if raw_api_key else ""
 
-if clean_api_key:
-    genai.configure(api_key=clean_api_key)
-
 if st.session_state["messages"]:
     st.sidebar.write("---")
     st.sidebar.subheader("💾 حفظ سجل المحادثة")
@@ -56,6 +53,9 @@ if st.session_state["messages"]:
 
 # --- التطبيق الرئيسي ---
 if clean_api_key:
+    # تهيئة عميل Gemini الجديد
+    client = genai.Client(api_key=clean_api_key)
+
     uploaded_files = st.file_uploader("قم برفع ملفات PDF:", type="pdf", accept_multiple_files=True)
 
     if uploaded_files:
@@ -127,15 +127,17 @@ if clean_api_key:
                         f"User Request/Question: {user_query}"
                     )
 
-                    # استخدام المكتبة الرسمية مع النموذج القياسي المدعوم دائماً
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    response = model.generate_content(prompt_text)
+                    # استدعاء نموذج gemini-2.5-flash بـ API الجديد
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt_text,
+                    )
 
                     if response and response.text:
                         st.session_state["messages"].append({"role": "assistant", "content": response.text})
                         st.rerun()
                     else:
-                        st.error("لم يتم استلام إجابة صحيحة من النموذج.")
+                        st.error("لم يتم استلام إجابة من النموذج.")
 
                 except Exception as e:
                     error_details = traceback.format_exc()
